@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61", "wheel", "pybind11>=2.10.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "blage"
+authors = [
+  { name="Vasiliy Lekomtsev", email="mexerily@gmail.com" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+version = "1.0.0"
+description = "A Python library for block-based image processing"
+readme = "README.md"
+requires-python = ">=3.7"
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+blage = ["blage.pyi"]
+
+[[tool.setuptools.ext-modules]]
+name = "blage"
+include-dirs = ["${pybind11_include}","src"]
+sources = ["src/bindings.cpp", "src/BlockImage.cpp","src/BlockImage.hpp"]
+language = "c++"
+
+
+[project.urls]
+Homepage = "https://github.com/XENOXI/blockImage"

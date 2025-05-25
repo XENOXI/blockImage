@@ -4,10 +4,10 @@
 
 namespace py = pybind11;
 
-PYBIND11_MODULE(bim, m) {
+PYBIND11_MODULE(blage, m) {
     m.doc() = "Block image processing library";
 
-    py::class_<BlockImage>(m, "BlockImage")        
+    py::class_<BlockImage>(m, "bim")        
           .def(py::init<py::array_t<uint8_t>, uint32_t ,uint32_t, float>(),
              py::arg("arr"), py::arg("pixels_per_block"), py::arg("blocks_per_block")=2, py::arg("color_threshold") = 0.0f,
              "Create a BlockImage from numpy array with specified pixels per block, blocks per block and optional color threshold")
