@@ -1,0 +1,11 @@
+[build-system]
+requires = ["setuptools>=42", "wheel", "pybind11>=2.6.0", "cmake>=3.14"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bim"
+version = "1.0.0"
+description = "A Python library for block-based image processing"
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "MIT"}
