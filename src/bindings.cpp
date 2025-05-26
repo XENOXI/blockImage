@@ -5,34 +5,60 @@
 namespace py = pybind11;
 
 PYBIND11_MODULE(blage, m) {
-    m.doc() = "Block image processing library";
+   m.doc() = "Block image processing library";
+   
+   py::class_<_blockImageProxy<BlockImage&>>(m,"_block_proxy_blocks")
+      .def("__getitem__", &_blockImageProxy<BlockImage&>::operator(),
+            "Index in the inner blocks")
+      .def("__setitem__",[](const _blockImageProxy<BlockImage&> &self,std::pair<uint32_t,uint32_t> key,BlockImage& value){self(key) = value;},
+            "Set block");
 
-    py::class_<BlockImage>(m, "bim")        
-          .def(py::init<py::array_t<uint8_t>, uint32_t ,uint32_t, float>(),
-             py::arg("arr"), py::arg("pixels_per_block"), py::arg("blocks_per_block")=2, py::arg("color_threshold") = 0.0f,
-             "Create a BlockImage from numpy array with specified pixels per block, blocks per block and optional color threshold")
-        
-          .def("save", static_cast<void (BlockImage::*)(const std::string&)>(&BlockImage::save), py::arg("filename"),
-             "Save the BlockImage to a file")
-        
-          .def("to_numpy", &BlockImage::toNumpy,
-             "Convert the BlockImage to a numpy array")
+   py::class_<_blockImageProxy<uint8_t&>>(m,"_block_proxy_pixels")
+      .def("__getitem__", &_blockImageProxy<uint8_t&>::operator(),
+            "Index in the inner pixels")
+      .def("__setitem__",[](const _blockImageProxy<uint8_t&> &self,std::pair<uint32_t,uint32_t> key,uint8_t& value){self(key) = value;},
+            "Set pixel");
 
-          .def("resolution", &BlockImage::resolution,
-          "Get the BlockImage resolution")
+   py::class_<BlockImage>(m, "bim")        
+         .def(py::init<py::array_t<uint8_t>, uint32_t ,uint32_t, float>(),
+            py::arg("arr"), py::arg("pixels_per_block"), py::arg("blocks_per_block")=2, py::arg("color_threshold") = 0.0f,
+            "Create a BlockImage from numpy array with specified pixels per block, blocks per block and optional color threshold")
+      
+         .def("save", static_cast<void (BlockImage::*)(const std::string&)>(&BlockImage::save), py::arg("filename"),
+            "Save the BlockImage to a file")
+      
+         .def("to_numpy", &BlockImage::toNumpy,
+            "Convert the BlockImage to a numpy array")
 
-          .def("pixels_per_block",&BlockImage::pixelsPerBlock,
-          "Get pixels count per block")
+         .def_property_readonly("resolution", &BlockImage::resolution,
+         "Get the BlockImage resolution")
 
-          .def("blocks_per_block",&BlockImage::blocksPerBlock,
-          "Get blocks count per block");
-     m.def("load", [](const std::string& filename) { return BlockImage::load(filename); }, py::arg("filename"),
-           "Load a BlockImage from a file");
+         .def_property_readonly("pixels_per_block",&BlockImage::pixelsPerBlock,
+         "Get pixels count per block")
 
-     m.def("zeros", &BlockImage::zeros ,py::arg("width"), py::arg("height"), py::arg("channels"), py::arg("pixelsPerBlock"), py::arg("blocksPerBlock")=2,
-          "Create a new BlockImage filled zeros with specified width, height, channels, and pixels per block");
-     
+         .def_property_readonly("blocks_per_block",&BlockImage::blocksPerBlock,
+         "Get blocks count per block")
 
-    m.attr("__version__") = "1.0.0";
+         .def_property_readonly("has_inner_block",&BlockImage::hasInnerBlocks,
+         "Return if block consist another blocks")
+         
+         .def_property_readonly("channels",&BlockImage::channels,
+         "Get image channels")
+         
+         .def_property_readonly("blocks",&BlockImage::getBlockProxy,
+         "Get inner blocks")
+
+         .def_property_readonly("canvas",&BlockImage::getCanvasProxy,
+         "Get canvas");
+
+      
+   m.def("load", [](const std::string& filename) { return BlockImage::load(filename); }, py::arg("filename"),
+         "Load a BlockImage from a file");
+
+   m.def("zeros", &BlockImage::zeros ,py::arg("width"), py::arg("height"), py::arg("channels"), py::arg("pixelsPerBlock"), py::arg("blocksPerBlock")=2,
+         "Create a new BlockImage filled zeros with specified width, height, channels, and pixels per block");
+   
+
+   m.attr("__version__") = "1.0.0";
 
 }

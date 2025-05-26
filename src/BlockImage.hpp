@@ -6,8 +6,32 @@
 #include <cstdint>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
-
+#include <functional>
 namespace py = pybind11;
+
+class BlockImage;
+
+template<class T>
+class _blockImageProxy {
+    std::function<T(uint32_t,uint32_t)> object;
+
+    friend class BlockImage;
+    _blockImageProxy(std::function<T(uint32_t,uint32_t)> func) : object(func) {};
+public:  
+    T operator()(std::pair<uint32_t,uint32_t> pair) const { return object(pair.first,pair.second);}
+    _blockImageProxy(const _blockImageProxy&) = delete;
+    _blockImageProxy& operator=(const _blockImageProxy&) = delete;
+    _blockImageProxy(_blockImageProxy&& other) noexcept : object(other.object) {
+        other.object = nullptr;
+    }
+    _blockImageProxy& operator=(_blockImageProxy&& other) noexcept {
+        if (this != &other) {
+            object = other.object;
+            other.object = nullptr;
+        }
+        return *this;
+    }
+};
 
 class BlockImage {
 private:
@@ -41,18 +65,13 @@ public:
     uint32_t pixelsPerBlock() { return PPB; }
     uint32_t blocksPerBlock() { return BPB; }   
     uint32_t channels() { return chans; }
-    bool haveInnerBlocks() {return BPB != 0;}
+    bool hasInnerBlocks() {return BPB != 0;}
 
-    BlockImage& getBlock(uint32_t x,uint32_t y) {
-        if (innerBlockImage.get() == nullptr || x >= BPB || y >= BPB) {
-            throw std::out_of_range("Error: Index out of bounds.");
-        }
-        return innerBlockImage.get()[x*BPB + y];
-    }
-
+    _blockImageProxy<BlockImage&> getBlockProxy() {return [this](uint32_t x,uint32_t y)->BlockImage&{return this->getBlock(x,y);};};
+    _blockImageProxy<uint8_t&> getCanvasProxy() {return [this](uint32_t x,uint32_t y)->uint8_t&{return this->getPixel(x,y);};};
+    BlockImage& getBlock(uint32_t x,uint32_t y) const;
     
-    
-    uint8_t& pixel(uint32_t x,uint32_t y) {
+    uint8_t& getPixel(uint32_t x,uint32_t y) const {
         if (data.get() == nullptr || x >= PPB|| y >= PPB) {
             throw std::out_of_range("Error: Index out of bounds.");
         }
@@ -61,3 +80,5 @@ public:
     void setCanvas(py::array_t<uint8_t>& newCanvas,bool copy=true);
 
 };
+
+

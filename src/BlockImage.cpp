@@ -213,7 +213,7 @@ BlockImage::BlockImage(const py::array_t<uint8_t>& arr,uint32_t pixelsPerBlock,u
     : PPB(pixelsPerBlock), BPB(blocksPerBlock), isRoot(true) {
     if (arr.ndim() != 3 || arr.shape(0) == 0 || arr.shape(1) == 0 || arr.shape(2) == 0)
         throw std::invalid_argument("Not a image");
-    if (blocksPerBlock != 0 || pixelsPerBlock != 0)
+    if (blocksPerBlock == 0 || pixelsPerBlock == 0)
         throw std::invalid_argument("Pixels per block or blocks per block is zero");
     if (colorThershold < 0)
         throw std::invalid_argument("Color thershold < 0");
@@ -349,6 +349,15 @@ py::array_t<uint8_t>  BlockImage::toNumpy() {
     writeToNumpy(arr,0,0);
     return arr;       
 
+}
+
+BlockImage & BlockImage::getBlock(uint32_t x, uint32_t y) const
+{
+    
+    if (innerBlockImage.get() == nullptr || x >= BPB || y >= BPB) {
+        throw std::out_of_range("Error: Index out of bounds.");
+    }
+    return innerBlockImage.get()[x*BPB + y];
 }
 
 void BlockImage::setCanvas(py::array_t<uint8_t> &newCanvas,bool copy)
