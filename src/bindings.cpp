@@ -7,16 +7,16 @@ namespace py = pybind11;
 PYBIND11_MODULE(blage, m) {
    m.doc() = "Block image processing library";
    
-   py::class_<_blockImageProxy<BlockImage&>>(m,"_block_proxy_blocks")
-      .def("__getitem__", &_blockImageProxy<BlockImage&>::operator(),
+   py::class_<std::function<BlockImage&(std::pair<uint32_t,uint32_t>)>>(m,"_proxy_blocks")
+      .def("__getitem__", &std::function<BlockImage&(std::pair<uint32_t,uint32_t>)>::operator(),
             "Index in the inner blocks")
-      .def("__setitem__",[](const _blockImageProxy<BlockImage&> &self,std::pair<uint32_t,uint32_t> key,BlockImage& value){self(key) = value;},
+      .def("__setitem__",[](const std::function<BlockImage&(std::pair<uint32_t,uint32_t>)> &self,std::pair<uint32_t,uint32_t> key,BlockImage& value){self(key) = value;},
             "Set block");
 
-   py::class_<_blockImageProxy<uint8_t&>>(m,"_block_proxy_pixels")
-      .def("__getitem__", &_blockImageProxy<uint8_t&>::operator(),
+   py::class_<std::function<uint8_t&(std::pair<uint32_t,uint32_t>)>>(m,"_proxy_pixels")
+      .def("__getitem__", &std::function<uint8_t&(std::pair<uint32_t,uint32_t>)>::operator(),
             "Index in the inner pixels")
-      .def("__setitem__",[](const _blockImageProxy<uint8_t&> &self,std::pair<uint32_t,uint32_t> key,uint8_t& value){self(key) = value;},
+      .def("__setitem__",[](const std::function<uint8_t&(std::pair<uint32_t,uint32_t>)> &self,std::pair<uint32_t,uint32_t> key,uint8_t& value){ self(key) = value;},
             "Set pixel");
 
    py::class_<BlockImage>(m, "bim")        
@@ -49,7 +49,8 @@ PYBIND11_MODULE(blage, m) {
          "Get inner blocks")
 
          .def_property_readonly("canvas",&BlockImage::getCanvasProxy,
-         "Get canvas");
+         "Get canvas")
+      ;
 
       
    m.def("load", [](const std::string& filename) { return BlockImage::load(filename); }, py::arg("filename"),
