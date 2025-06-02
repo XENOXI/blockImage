@@ -18,7 +18,7 @@ PYBIND11_MODULE(blage, m) {
             py::arg("arr"), py::arg("pixels_per_block"), py::arg("blocks_per_block")=2, py::arg("color_threshold") = 0.0f,
             "Create a BlockImage from numpy array with specified pixels per block, blocks per block and optional color threshold")
       
-         .def("to_numpy", &BlockImage::toNumpy,
+         .def("numpy", &BlockImage::toNumpy,
             "Convert the BlockImage to a numpy array")
 
          .def_property_readonly("resolution", &BlockImage::resolution,
