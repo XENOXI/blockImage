@@ -52,7 +52,7 @@ BlockImage::BlockImage(const py::array_t<uint8_t>& arr,uint32_t x_st,uint32_t y_
         return;
     }
 
-   
+    BPB = 0;
     if (max_color - min_color > colorThershold)
     {
         data = py::array_t<uint8_t>({PPB,PPB,chans});
@@ -73,8 +73,6 @@ BlockImage::BlockImage(const py::array_t<uint8_t>& arr,uint32_t x_st,uint32_t y_
         link(i) = color.get()[i];
     }
     PPB = 0;
-     
-    size = 1;
 }
  
 
@@ -109,19 +107,22 @@ BlockImage::BlockImage(uint32_t size_,uint32_t channels, uint32_t pixelsPerBlock
         
 }
 
-BlockImage BlockImage::load(std::ifstream& file,uint32_t size_,uint32_t channels, uint32_t pixelsPerBlock, uint32_t blocksPerBlock) 
+BlockImage BlockImage::load(std::ifstream& file,uint32_t size_,uint32_t channels, uint32_t pixelsPerBlock, uint32_t blocksPerBlock,bool isRoot) 
 {
-    BlockImage res(size_,channels,pixelsPerBlock,blocksPerBlock);
+    BlockImage res(size_,channels,pixelsPerBlock,blocksPerBlock,isRoot);
     char type;
     file.read(&type, 1);
     BlockImage* buffer = nullptr;
     switch (type)
     {
     case 'C':
+        res.BPB = 0;
+        res.PPB = 0;
         res.data = py::array_t<uint8_t>({channels});
         file.read(reinterpret_cast<char*>(res.data.mutable_data()), channels);
         break;
     case 'B':
+        res.BPB = 0;
         res.data = py::array_t<uint8_t>({pixelsPerBlock, pixelsPerBlock, channels});
         file.read(reinterpret_cast<char*>(res.data.mutable_data()), pixelsPerBlock * pixelsPerBlock * channels);
         break;
@@ -188,6 +189,7 @@ BlockImage BlockImage::innerZeros(uint32_t size, uint32_t channels,uint32_t pixe
     BlockImage res(size,channels,pixelsPerBlock,blocksPerBlock);
     if (size <= pixelsPerBlock)
     {
+        res.BPB = 0;
         res.data = py::array_t<uint8_t>({pixelsPerBlock, pixelsPerBlock, channels});
         memset(res.data.mutable_data(),0,sizeof(uint8_t)*pixelsPerBlock * pixelsPerBlock * channels);
         return res;
@@ -203,7 +205,7 @@ BlockImage BlockImage::innerZeros(uint32_t size, uint32_t channels,uint32_t pixe
 
     
 // public:
-BlockImage BlockImage::zeros(uint32_t width, uint32_t height, uint32_t channels,uint32_t pixelsPerBlock,uint32_t blocksPerBlock)
+BlockImage BlockImage::zeros(uint32_t width, uint32_t height,uint32_t pixelsPerBlock,uint32_t channels,uint32_t blocksPerBlock)
 {
     auto prefered_size = std::max(width, height);
 
@@ -214,6 +216,7 @@ BlockImage BlockImage::zeros(uint32_t width, uint32_t height, uint32_t channels,
     BlockImage res(size,channels,pixelsPerBlock,blocksPerBlock,true);
     if (size <= pixelsPerBlock)
     {
+        res.BPB = 0;
         res.data = py::array_t<uint8_t>({pixelsPerBlock, pixelsPerBlock, channels});
         memset(res.data.mutable_data(),0,sizeof(uint8_t)*pixelsPerBlock * pixelsPerBlock * channels);
         return res;
@@ -280,6 +283,7 @@ BlockImage::BlockImage(const py::array_t<uint8_t>& arr,uint32_t pixelsPerBlock,u
         
         return;
     }
+    BPB = 0;
     if (max_color - min_color > colorThershold)
     {
         uint32_t x_st = 0;
@@ -293,7 +297,17 @@ BlockImage::BlockImage(const py::array_t<uint8_t>& arr,uint32_t pixelsPerBlock,u
         link(i) = color.get()[i];
     }
     PPB = 0;  
-    size = 1;
+}
+
+BlockImage BlockImage::fromcolor(py::tuple color, uint32_t size)
+{
+    BlockImage res(size,0,0);
+    res.data = py::array_t<uint8_t>({static_cast<long long>(color.size())});
+    auto& link = res.data.mutable_unchecked<1>();
+    for (uint32_t i = 0;i<color.size();i++)
+        link(i) = color[i].cast<uint8_t>();
+
+    return res;
 }
 
 BlockImage &BlockImage::operator=(const BlockImage &other)
@@ -304,12 +318,12 @@ BlockImage &BlockImage::operator=(const BlockImage &other)
         chans = other.chans;
         PPB = other.PPB;
         BPB = other.BPB;
-        innerBlockImage = other.innerBlockImage;
+        innerBlockImage = other.innerBlockImage; 
         data = other.data;
         return *this;
     }
-    
-    if (size != other.size || PPB != other.PPB || BPB != other.BPB || chans != other.chans)
+
+    if (size != other.size || chans != other.chans || !(BPB == 0 && (PPB==0 || PPB == other.PPB) || BPB == other.BPB))
         throw std::invalid_argument("Not compatible blocks");
     
     innerBlockImage = other.innerBlockImage;
@@ -347,8 +361,7 @@ BlockImage BlockImage::load(const std::string& filename) {
     file.read(reinterpret_cast<char*>(&chans), sizeof(chans));
     file.read(reinterpret_cast<char*>(&PPB), sizeof(PPB));
     file.read(reinterpret_cast<char*>(&BPB), sizeof(BPB));
-    auto block = load(file,size, chans, PPB, BPB);
-    block.isRoot = true;
+    auto block = load(file,size, chans, PPB, BPB,true);
     file.close();
     return block;
 }

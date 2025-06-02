@@ -52,8 +52,10 @@ PYBIND11_MODULE(blage, m) {
          "Load a BlockImage from a file");
 
    m.def("zeros", &BlockImage::zeros ,py::arg("width"), py::arg("height"), py::arg("channels"), py::arg("pixelsPerBlock"), py::arg("blocksPerBlock")=2,
-         "Create a new BlockImage filled zeros with specified width, height, channels, and pixels per block");
+         "Create a new bim filled zeros with specified width, height, channels, and pixels per block");
    
+   m.def("fromcolor",&BlockImage::fromcolor,py::arg("color"),py::arg("size"),
+      "Create a new bim from specified color and size");
 
    m.attr("__version__") = "1.0.0";
 
