@@ -1,11 +1,18 @@
 #include "BlockImage.hpp"
 namespace py = pybind11;
 
-void BlockImage::setPixel(uint32_t x, uint32_t y, uint32_t channel, uint8_t value) {
-    if (data && x < size && y < size && channel < chans) {
-        data.get()[(y * size + x) * chans + channel] = value;
-    }
+
+std::shared_ptr<BlockImage[]> BlockImage::initInnerBlockImage(uint32_t blocksPerBlock)
+{
+    return std::shared_ptr<BlockImage[]>(static_cast<BlockImage*>(operator new(blocksPerBlock*blocksPerBlock*sizeof(BlockImage))),
+    [blocksPerBlock](BlockImage* p){
+            for (uint32_t i = 0; i < blocksPerBlock * blocksPerBlock; ++i) {
+                (p + i)->~BlockImage();
+            }
+            operator delete(p);
+        });
 }
+
 
 BlockImage::BlockImage(const py::array_t<uint8_t>& arr,uint32_t x_st,uint32_t y_st,uint32_t size_,uint32_t pixelsPerBlock, uint32_t blocksPerBlock,float colorThershold)
         : chans(arr.shape(2)), PPB(pixelsPerBlock), size(size_), BPB(blocksPerBlock)
@@ -33,13 +40,7 @@ BlockImage::BlockImage(const py::array_t<uint8_t>& arr,uint32_t x_st,uint32_t y_
     auto next_size = size / BPB;
     if (max_color - min_color > colorThershold && size > PPB)
     {
-        innerBlockImage = std::shared_ptr<BlockImage[]>(static_cast<BlockImage*>(operator new(blocksPerBlock*blocksPerBlock*sizeof(BlockImage))),
-        [blocksPerBlock](BlockImage* p){
-                for (uint32_t i = 0; i < blocksPerBlock * blocksPerBlock; ++i) {
-                    (p + i)->~BlockImage();
-                }
-                operator delete(p);
-            });
+        innerBlockImage = initInnerBlockImage(blocksPerBlock);
         for (uint32_t i = 0; i < BPB; ++i) {
             for (uint32_t j = 0; j < BPB; ++j) {
                 auto next_x_st = x_st + i * next_size;
@@ -54,27 +55,30 @@ BlockImage::BlockImage(const py::array_t<uint8_t>& arr,uint32_t x_st,uint32_t y_
    
     if (max_color - min_color > colorThershold)
     {
-        data = std::shared_ptr<uint8_t[]>(new uint8_t[PPB * PPB*chans]);
+        data = py::array_t<uint8_t>({PPB,PPB,chans});
+        auto &link = data.mutable_unchecked<3>();
         for (uint32_t i = 0; i < PPB; ++i) {
             for (uint32_t j = 0; j < PPB; ++j) {
                 for (uint32_t k = 0; k < chans; ++k) {
-                    data.get()[(i * PPB + j) * chans + k] = arr_a(x_st + i,y_st + j,k);
+                    link(i,j,k) = arr_a(x_st + i,y_st + j,k);
                 }
             }
         }
         return;
     }
 
-    data = std::shared_ptr<uint8_t[]>(new uint8_t[chans]);
+    data = py::array_t<uint8_t>({chans});
+    auto &link = data.mutable_unchecked<1>();
     for (uint32_t i = 0; i < chans; ++i) {
-        data.get()[i] = color.get()[i];
+        link(i) = color.get()[i];
     }
     PPB = 0;
      
     size = 1;
 }
  
-void BlockImage::save(std::ofstream& file)
+
+void BlockImage::save(std::ofstream& file) const
 {
     if (innerBlockImage != nullptr)
     {
@@ -87,11 +91,11 @@ void BlockImage::save(std::ofstream& file)
     else if (PPB == 0)
     {
         file.write("C", 1);
-        file.write(reinterpret_cast<const char*>(data.get()), chans);
-    }else if (data.get() != nullptr)
+        file.write(reinterpret_cast<const char*>(data.data()), chans);
+    }else if (data != nullptr)
     {
         file.write("B", 1);
-        file.write(reinterpret_cast<const char*>(data.get()), PPB * PPB * chans);
+        file.write(reinterpret_cast<const char*>(data.data()), PPB * PPB * chans);
     }
     else
     {
@@ -102,7 +106,7 @@ void BlockImage::save(std::ofstream& file)
 
 BlockImage::BlockImage(uint32_t size_,uint32_t channels, uint32_t pixelsPerBlock, uint32_t blocksPerBlock,bool isRoot_)
     : size(size_), chans(channels), PPB(pixelsPerBlock), BPB(blocksPerBlock), isRoot(isRoot_) {
-        std::cout << this << " EMPTY CONSTRUCTOR" << std::endl;
+        
 }
 
 BlockImage BlockImage::load(std::ifstream& file,uint32_t size_,uint32_t channels, uint32_t pixelsPerBlock, uint32_t blocksPerBlock) 
@@ -114,21 +118,15 @@ BlockImage BlockImage::load(std::ifstream& file,uint32_t size_,uint32_t channels
     switch (type)
     {
     case 'C':
-        res.data = std::shared_ptr<uint8_t[]>(new uint8_t[channels]);;
-        file.read(reinterpret_cast<char*>(res.data.get()), channels);
+        res.data = py::array_t<uint8_t>({channels});
+        file.read(reinterpret_cast<char*>(res.data.mutable_data()), channels);
         break;
     case 'B':
-        res.data = std::shared_ptr<uint8_t[]>(new uint8_t[pixelsPerBlock * pixelsPerBlock * channels]);;
-        file.read(reinterpret_cast<char*>(res.data.get()), pixelsPerBlock * pixelsPerBlock * channels);
+        res.data = py::array_t<uint8_t>({pixelsPerBlock, pixelsPerBlock, channels});
+        file.read(reinterpret_cast<char*>(res.data.mutable_data()), pixelsPerBlock * pixelsPerBlock * channels);
         break;
     case 'I':
-        res.innerBlockImage = std::shared_ptr<BlockImage[]>(static_cast<BlockImage*>(operator new(blocksPerBlock*blocksPerBlock*sizeof(BlockImage))),
-        [blocksPerBlock](BlockImage* p){
-            for (uint32_t i = 0; i < blocksPerBlock * blocksPerBlock; ++i) {
-                (p + i)->~BlockImage();
-            }
-            operator delete(p);
-        });
+        res.innerBlockImage = initInnerBlockImage(blocksPerBlock);
         for (uint32_t i = 0; i <  blocksPerBlock*blocksPerBlock; ++i) {
             new (res.innerBlockImage.get() + i) BlockImage(load(file,size_ / blocksPerBlock, channels, pixelsPerBlock,blocksPerBlock));
         }
@@ -141,15 +139,14 @@ BlockImage BlockImage::load(std::ifstream& file,uint32_t size_,uint32_t channels
     return res;
 }
     
-void BlockImage::writeToNumpy(py::array_t<uint8_t>& arr,uint32_t x_st,uint32_t y_st)
+void BlockImage::writeToNumpy(py::array_t<uint8_t>& arr,uint32_t x_st,uint32_t y_st) const
 {   
   
     auto next_size = size / BPB;
     // std::cout << x_st << " " << y_st << " " << innerBlockImage.get() << std::endl;
     // std::cout << size << " " << next_size << std::endl;
-    if (innerBlockImage.get()!=nullptr)
+    if (innerBlockImage!=nullptr)
     {
-        
         for (uint32_t i = 0; i < BPB; ++i) {
             for (uint32_t j = 0; j < BPB; ++j) {
                 // std::cout << x_st << " " << y_st << " " << innerBlockImage.get() << " " << i << " " << j << std::endl;
@@ -161,21 +158,22 @@ void BlockImage::writeToNumpy(py::array_t<uint8_t>& arr,uint32_t x_st,uint32_t y
     auto arr_a = arr.mutable_unchecked<3>();
     if (PPB == 0)
     {
+        auto& link = data.unchecked<1>();
         for (uint32_t i = 0; i < size; ++i) {
             for (uint32_t j = 0; j < size; ++j) {
                 for (uint32_t k = 0; k < chans; ++k) {
-                    arr_a(x_st+i,y_st+j,k) = data.get()[k];
+                    arr_a(x_st+i,y_st+j,k) = link[k];
                 }
             }
         }
         return;
     }
     // std::cout << "THIRD" << std::endl;
-
+    auto& link = data.unchecked<3>();
     for (uint32_t i = 0; i < PPB; ++i) {
         for (uint32_t j = 0; j < PPB; ++j) {
             for (uint32_t k = 0; k < chans; ++k) {
-                arr_a(x_st + i,y_st + j,k) = data.get()[(i * PPB + j) * chans + k];
+                arr_a(x_st + i,y_st + j,k) = link(i,j,k);
             }
         }
     }
@@ -188,20 +186,13 @@ void BlockImage::writeToNumpy(py::array_t<uint8_t>& arr,uint32_t x_st,uint32_t y
 BlockImage BlockImage::innerZeros(uint32_t size, uint32_t channels,uint32_t pixelsPerBlock,uint32_t blocksPerBlock)
 {
     BlockImage res(size,channels,pixelsPerBlock,blocksPerBlock);
-    std::cout << &res << " " << " INNERBLOCKS CONSTRUCT" << std::endl;
     if (size <= pixelsPerBlock)
     {
-        res.data = std::shared_ptr<uint8_t[]>(new uint8_t[pixelsPerBlock * pixelsPerBlock * channels]);
-        memset(res.data.get(),0,sizeof(uint8_t)*pixelsPerBlock * pixelsPerBlock * channels);
+        res.data = py::array_t<uint8_t>({pixelsPerBlock, pixelsPerBlock, channels});
+        memset(res.data.mutable_data(),0,sizeof(uint8_t)*pixelsPerBlock * pixelsPerBlock * channels);
         return res;
     }
-    res.innerBlockImage = std::shared_ptr<BlockImage[]>(static_cast<BlockImage*>(operator new(blocksPerBlock*blocksPerBlock*sizeof(BlockImage))),
-    [blocksPerBlock](BlockImage* p){
-            for (uint32_t i = 0; i < blocksPerBlock * blocksPerBlock; ++i) {
-                (p + i)->~BlockImage();
-            }
-            operator delete(p);
-        });
+    res.innerBlockImage = initInnerBlockImage(blocksPerBlock);
     for (uint32_t i = 0; i < blocksPerBlock*blocksPerBlock; ++i) {
         new (res.innerBlockImage.get() + i) BlockImage(BlockImage::innerZeros(size/blocksPerBlock,channels,pixelsPerBlock,blocksPerBlock)); 
     }
@@ -221,25 +212,17 @@ BlockImage BlockImage::zeros(uint32_t width, uint32_t height, uint32_t channels,
         size *= blocksPerBlock;
     }
     BlockImage res(size,channels,pixelsPerBlock,blocksPerBlock,true);
-
-    std::cout << &res << " CONSTRUCT" << std::endl;
     if (size <= pixelsPerBlock)
     {
-        res.data = std::shared_ptr<uint8_t[]>(new uint8_t[pixelsPerBlock * pixelsPerBlock * channels]);
-        memset(res.data.get(),0,sizeof(uint8_t)*pixelsPerBlock * pixelsPerBlock * channels);
+        res.data = py::array_t<uint8_t>({pixelsPerBlock, pixelsPerBlock, channels});
+        memset(res.data.mutable_data(),0,sizeof(uint8_t)*pixelsPerBlock * pixelsPerBlock * channels);
         return res;
     }
-    res.innerBlockImage = std::shared_ptr<BlockImage[]>(static_cast<BlockImage*>(operator new(blocksPerBlock*blocksPerBlock*sizeof(BlockImage))),
-    [blocksPerBlock](BlockImage* p){
-            for (uint32_t i = 0; i < blocksPerBlock * blocksPerBlock; ++i) {
-                (p + i)->~BlockImage();
-            }
-            operator delete(p);
-        });
+    res.innerBlockImage = initInnerBlockImage(blocksPerBlock);
     for (uint32_t i = 0; i < blocksPerBlock*blocksPerBlock; ++i) {
         new (res.innerBlockImage.get() + i) BlockImage(BlockImage::innerZeros(size/blocksPerBlock,channels,pixelsPerBlock,blocksPerBlock)); 
     }
-    std::cout << res.innerBlockImage << " BLOCKS CONSTRUCT" << std::endl;
+    
     return res;
 }
 
@@ -288,13 +271,7 @@ BlockImage::BlockImage(const py::array_t<uint8_t>& arr,uint32_t pixelsPerBlock,u
     auto next_size = size / BPB;
     if (max_color - min_color > colorThershold && size > PPB)
     {
-        innerBlockImage = std::shared_ptr<BlockImage[]>(static_cast<BlockImage*>(operator new(BPB*BPB*sizeof(BlockImage))),
-        [blocksPerBlock](BlockImage* p){
-            for (uint32_t i = 0; i < blocksPerBlock * blocksPerBlock; ++i) {
-                (p + i)->~BlockImage();
-            }
-            operator delete(p);
-        });
+        innerBlockImage = initInnerBlockImage(BPB);
         for (uint32_t i = 0; i < BPB; ++i) {
             for (uint32_t j = 0; j < BPB; ++j) {
                 new (innerBlockImage.get() + i*BPB + j) BlockImage(buffer,i * next_size,j * next_size,next_size, PPB,BPB,colorThershold);
@@ -307,19 +284,13 @@ BlockImage::BlockImage(const py::array_t<uint8_t>& arr,uint32_t pixelsPerBlock,u
     {
         uint32_t x_st = 0;
         uint32_t y_st = 0;
-        data = std::shared_ptr<uint8_t[]>(new uint8_t[PPB * PPB * chans]);
-        for (uint32_t i = 0; i < PPB; ++i) {
-            for (uint32_t j = 0; j < PPB; ++j) {
-                for (uint32_t k = 0; k < chans; ++k) {
-                    data.get()[(i * PPB + j) * chans + k] = buff_a(i,j,k);
-                }
-            }
-        }
+        data = buffer;
         return;
     }
-    data = std::shared_ptr<uint8_t[]>(new uint8_t[chans]);
+    data = py::array_t<uint8_t>({chans});
+    auto& link = data.mutable_unchecked<1>();
     for (uint32_t i = 0; i < chans; ++i) {
-        data.get()[i] = color.get()[i];
+        link(i) = color.get()[i];
     }
     PPB = 0;  
     size = 1;
@@ -349,7 +320,7 @@ BlockImage &BlockImage::operator=(const BlockImage &other)
 
 
 
-void BlockImage::save(const std::string& filename) 
+void BlockImage::save(const std::string& filename) const
 {
     std::ofstream file(filename, std::ios::binary);
     if (!file) {
@@ -382,7 +353,7 @@ BlockImage BlockImage::load(const std::string& filename) {
     return block;
 }
 
-py::array_t<uint8_t>  BlockImage::toNumpy() {
+py::array_t<uint8_t>  BlockImage::toNumpy() const {
     py::array_t<uint8_t> arr({size, size, chans});
     writeToNumpy(arr,0,0);
     return arr;       
@@ -398,19 +369,6 @@ BlockImage& BlockImage::getBlock(std::pair<uint32_t,uint32_t> idx) const
     return innerBlockImage.get()[idx.first*BPB + idx.second];
 }
 
-void BlockImage::setCanvas(py::array_t<uint8_t> &newCanvas,bool copy)
-{
-    if (newCanvas.ndim() != 3 || newCanvas.shape(0) == 0 || newCanvas.shape(1) == 0 || newCanvas.shape(2) == 0)
-        throw std::invalid_argument("Not a image");
-    if (newCanvas.shape(0) != size || newCanvas.shape(1) != size || newCanvas.shape(2) != chans)
-        throw std::invalid_argument("Shape must be (" + size + ',' + size + ',' +chans + ')');
-
-    std::copy(newCanvas.data(),  newCanvas.data() + PPB*PPB*chans, data.get());
-
-}
-
-BlockImage::BlockImage(const BlockImage& other) : size(other.size), chans(other.chans), PPB(other.PPB), BPB(other.BPB), isRoot(other.isRoot) {
-    std::cout  << this << " COPING " << &other  << std::endl;
-    data = other.data;
-    innerBlockImage = other.innerBlockImage;
+BlockImage::BlockImage(const BlockImage& other) : size(other.size), chans(other.chans), PPB(other.PPB), BPB(other.BPB),
+ isRoot(other.isRoot), data(other.data), innerBlockImage(other.innerBlockImage) {
 }

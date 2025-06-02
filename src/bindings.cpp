@@ -6,26 +6,17 @@ namespace py = pybind11;
 
 PYBIND11_MODULE(blage, m) {
    m.doc() = "Block image processing library";
-   
+
    py::class_<std::function<BlockImage&(std::pair<uint32_t,uint32_t>)>>(m,"_proxy_blocks")
       .def("__getitem__", &std::function<BlockImage&(std::pair<uint32_t,uint32_t>)>::operator(),
             "Index in the inner blocks")
       .def("__setitem__",[](const std::function<BlockImage&(std::pair<uint32_t,uint32_t>)> &self,std::pair<uint32_t,uint32_t> key,BlockImage& value){self(key) = value;},
             "Set block");
 
-   py::class_<std::function<uint8_t&(std::pair<uint32_t,uint32_t>)>>(m,"_proxy_pixels")
-      .def("__getitem__", &std::function<uint8_t&(std::pair<uint32_t,uint32_t>)>::operator(),
-            "Index in the inner pixels")
-      .def("__setitem__",[](const std::function<uint8_t&(std::pair<uint32_t,uint32_t>)> &self,std::pair<uint32_t,uint32_t> key,uint8_t& value){ self(key) = value;},
-            "Set pixel");
-
    py::class_<BlockImage>(m, "bim")        
          .def(py::init<py::array_t<uint8_t>, uint32_t ,uint32_t, float>(),
             py::arg("arr"), py::arg("pixels_per_block"), py::arg("blocks_per_block")=2, py::arg("color_threshold") = 0.0f,
             "Create a BlockImage from numpy array with specified pixels per block, blocks per block and optional color threshold")
-      
-         .def("save", static_cast<void (BlockImage::*)(const std::string&)>(&BlockImage::save), py::arg("filename"),
-            "Save the BlockImage to a file")
       
          .def("to_numpy", &BlockImage::toNumpy,
             "Convert the BlockImage to a numpy array")
@@ -48,8 +39,12 @@ PYBIND11_MODULE(blage, m) {
          .def_property_readonly("blocks",&BlockImage::getBlockProxy,
          "Get inner blocks")
 
-         .def_property_readonly("canvas",&BlockImage::getCanvasProxy,
+         .def_property_readonly("canvas",&BlockImage::getCanvas,
          "Get canvas")
+
+         .def("save", static_cast<void (BlockImage::*)(const std::string&) const>(&BlockImage::save), py::arg("filename"),
+            "Save the BlockImage to a file")
+      
       ;
 
       
