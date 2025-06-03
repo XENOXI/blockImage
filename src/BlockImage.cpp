@@ -142,16 +142,18 @@ BlockImage BlockImage::load(std::ifstream& file,uint32_t size_,uint32_t channels
     
 void BlockImage::writeToNumpy(py::array_t<uint8_t>& arr,uint32_t x_st,uint32_t y_st) const
 {   
-  
-    auto next_size = size / BPB;
+    
     // std::cout << x_st << " " << y_st << " " << innerBlockImage.get() << std::endl;
     // std::cout << size << " " << next_size << std::endl;
     if (innerBlockImage!=nullptr)
     {
+        auto next_size = size / BPB;
         for (uint32_t i = 0; i < BPB; ++i) {
             for (uint32_t j = 0; j < BPB; ++j) {
                 // std::cout << x_st << " " << y_st << " " << innerBlockImage.get() << " " << i << " " << j << std::endl;
+               
                 innerBlockImage.get()[i*BPB + j].writeToNumpy(arr,x_st+i*next_size,y_st+j*next_size);
+                
             }
         }
         return;
@@ -160,6 +162,7 @@ void BlockImage::writeToNumpy(py::array_t<uint8_t>& arr,uint32_t x_st,uint32_t y
     if (PPB == 0)
     {
         auto& link = data.unchecked<1>();
+        
         for (uint32_t i = 0; i < size; ++i) {
             for (uint32_t j = 0; j < size; ++j) {
                 for (uint32_t k = 0; k < chans; ++k) {
@@ -170,6 +173,7 @@ void BlockImage::writeToNumpy(py::array_t<uint8_t>& arr,uint32_t x_st,uint32_t y
         return;
     }
     // std::cout << "THIRD" << std::endl;
+    
     auto& link = data.unchecked<3>();
     for (uint32_t i = 0; i < PPB; ++i) {
         for (uint32_t j = 0; j < PPB; ++j) {
@@ -272,6 +276,7 @@ BlockImage::BlockImage(const py::array_t<uint8_t>& arr,uint32_t pixelsPerBlock,u
     }
     
     auto next_size = size / BPB;
+    
     if (max_color - min_color > colorThershold && size > PPB)
     {
         innerBlockImage = initInnerBlockImage(BPB);
@@ -280,7 +285,6 @@ BlockImage::BlockImage(const py::array_t<uint8_t>& arr,uint32_t pixelsPerBlock,u
                 new (innerBlockImage.get() + i*BPB + j) BlockImage(buffer,i * next_size,j * next_size,next_size, PPB,BPB,colorThershold);
             } 
         }
-        
         return;
     }
     BPB = 0;
